@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <link
+    href="https://fonts.googleapis.com/css?family=Open+Sans:400,300,300italic,400italic,600,600italic,700italic,700"
+    rel="stylesheet"
+  />
+
+  <title>Scratch Card</title>
+
+  <style>
+    html { box-sizing: border-box; }
+    *, *::before, *::after { box-sizing: inherit; }
+
+    body {
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #f0f0f0;
+    }
+
+    .sc__wrapper {
+      height: 100vh;
+      max-width: calc(100vh * (1080 / 1920));
+      aspect-ratio: 1080 / 1920;
+      border: 5px solid white;
+      position: relative;
+    }
+
+    .sc__container {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .sc__container img,
+    .sc__container canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+</head>
+
+<body>
+  <div class="sc__wrapper">
+    <div id="js--sc--container" class="sc__container">
+      <img src="./images/back.jpeg" alt="Background" />
+      <canvas id="scratchCanvas"></canvas>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const canvas = document.getElementById("scratchCanvas");
+      const container = document.getElementById("js--sc--container");
+      const ctx = canvas.getContext("2d");
+
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = container.clientWidth * dpr;
+      canvas.height = container.clientHeight * dpr;
+
+      const BOX = { x: 0.07, y: 0.24, w: 0.86, h: 0.4 };
+
+      let scratching = false;
+      let fired = false;
+      let count = 0;
+      let lx = null, ly = null;
+
+      /* 🔊 AUDIO */
+      const winSound = new Audio("./sounds/win.mp3");
+      winSound.preload = "auto";
+      winSound.volume = 0.7;
+
+      let primed = false;
+      function primeAudio() {
+        if (primed) return;
+        primed = true;
+
+        winSound.muted = true;
+        winSound.play().then(() => {
+          winSound.pause();
+          winSound.currentTime = 0;
+          winSound.muted = false;
+        }).catch(() => {});
+      }
+
+      const front = new Image();
+      front.src = "./images/front.jpeg";
+
+      front.onload = () => {
+        ctx.drawImage(front, 0, 0, canvas.width, canvas.height);
+        ctx.globalCompositeOperation = "destination-out";
+
+        canvas.addEventListener("mousedown", start);
+        canvas.addEventListener("touchstart", start, { passive: false });
+        canvas.addEventListener("mouseup", end);
+        canvas.addEventListener("mouseleave", end);
+        canvas.addEventListener("touchend", end);
+        canvas.addEventListener("touchcancel", end);
+      };
+
+      function start(e) {
+        primeAudio();
+        e.preventDefault();
+        scratching = true;
+        lx = ly = null;
+        scratch(e);
+        canvas.addEventListener("mousemove", scratch);
+        canvas.addEventListener("touchmove", scratch, { passive: false });
+      }
+
+      function end() {
+        scratching = false;
+        lx = ly = null;
+        canvas.removeEventListener("mousemove", scratch);
+        canvas.removeEventListener("touchmove", scratch);
+      }
+
+      function scratch(e) {
+        if (!scratching) return;
+
+        e.preventDefault();
+
+        const r = canvas.getBoundingClientRect();
+        const p = e.touches ? e.touches[0] : e;
+        const x = (p.clientX - r.left) * dpr;
+        const y = (p.clientY - r.top) * dpr;
+
+        const rad = 6 * dpr;
+
+        if (lx !== null) {
+          const dx = x - lx;
+          const dy = y - ly;
+          const dist = Math.hypot(dx, dy);
+          const steps = Math.max(1, Math.ceil(dist / (rad * 0.5)));
+
+          for (let i = 1; i <= steps; i++) {
+            ctx.beginPath();
+            ctx.arc(
+              lx + (dx * i) / steps,
+              ly + (dy * i) / steps,
+              rad,
+              0,
+              Math.PI * 2
+            );
+            ctx.fill();
+
+            if (!fired) progress(x, y);
+          }
+        } else {
+          ctx.beginPath();
+          ctx.arc(x, y, rad, 0, Math.PI * 2);
+          ctx.fill();
+
+          if (!fired) progress(x, y);
+        }
+
+        lx = x;
+        ly = y;
+      }
+
+      function progress(px, py) {
+        if (fired) return;
+
+        const nx = px / canvas.width;
+        const ny = py / canvas.height;
+
+        if (
+          nx >= BOX.x &&
+          nx <= BOX.x + BOX.w &&
+          ny >= BOX.y &&
+          ny <= BOX.y + BOX.h
+        ) {
+          if (++count >= 600) {
+            fired = true;
+
+            setTimeout(() => {
+              // 🤍✨ WHITE & GOLD CONFETTI
+              const confettiColors = [
+                "#FFFFFF",
+                "#F5F5F5",
+                "#D4AF37",
+                "#FFD700",
+                "#C9A227"
+              ];
+
+              function confettiBurst(originY = 0.62, particleCount = 110, velocity = 60) {
+                confetti({
+                  particleCount,
+                  spread: 55,
+                  startVelocity: velocity,
+                  gravity: 1.1,
+                  ticks: 160,
+                  scalar: 0.9,
+                  drift: (Math.random() - 0.5) * 0.8,
+                  origin: { x: 0.5, y: originY },
+                  colors: confettiColors,
+                  shapes: ["circle", "square"]
+                });
+              }
+
+              confettiBurst(0.62, 140, 65);
+              setTimeout(() => confettiBurst(0.60, 90, 55), 220);
+              setTimeout(() => confettiBurst(0.64, 70, 45), 520);
+
+              winSound.currentTime = 0;
+              winSound.play().catch(() => {});
+            }, 2000);
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html>
+
+
+
+
